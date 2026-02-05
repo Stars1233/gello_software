@@ -78,7 +78,7 @@ class GelloParameterConfig:
             ),
             ParameterConfig(
                 ParameterDescriptor(
-                    name="best_offsets",
+                    name="assembly_offsets",
                     type=ParameterType.PARAMETER_DOUBLE_ARRAY,
                     description="Joint offset calibration",
                     read_only=True,

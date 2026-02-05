@@ -117,11 +117,11 @@ colcon build
 
 #### Step 2: Configure your GELLO
 
-If you are using the "Franka GELLO Duo" variant and assembled it carefully according to the assembly instructions, the default configuration file provided in `franka_gello_state_publisher/config/` should work out of the box and you can proceed with **Step 3**.
+If you are using the "Franka GELLO" (single arm) or "Franka GELLO Duo" variant and assembled it carefully according to the assembly instructions, the default configuration files provided in `franka_gello_state_publisher/config/` should work out of the box and you can proceed with **Step 3**.
 
 If you have a different variant or still encounter configuration issues, please follow the instructions of the [`Create the GELLO configuration and determining joint ID's` section in the main README.md](../README.md#create-the-gello-configuration-and-determining-joint-ids). 
 
-Use the output of the `gello_get_offset.py` script to update the `best_offsets` and `gripper_range_rad` in your GELLO configuration file located in `/workspace/ros2/src/franka_gello_state_publisher/config/`.
+Use the output of the `gello_get_offset.py` script to update the `assembly_offsets` and `gripper_range_rad` in your GELLO configuration file located in `/workspace/ros2/src/franka_gello_state_publisher/config/`.
       
 Rebuild the project to ensure the updated configuration is applied:
 
@@ -147,7 +147,7 @@ The `config_file` argument is **optional**. If not provided, it defaults to `exa
 - `num_joints`: 7 for Franka FR3
 - `joint_signs`: as used for calibration
 - `gripper`: true if Gello gripper state shall be used
-- `best_offsets` and `gripper_range_rad`: as determined with calibration routine
+- `assembly_offsets` and `gripper_range_rad`: as determined with calibration routine
 - Dynamixel control parameters: `dynamixel_...` (see below)
 
 **Virtual Springs and Dampers:**<a name="virtual-springs-dampers"></a>

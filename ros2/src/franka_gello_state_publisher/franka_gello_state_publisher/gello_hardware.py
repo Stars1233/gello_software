@@ -14,7 +14,7 @@ class GelloHardwareParams(TypedDict):
     joint_signs: List[int]
     gripper: bool
     gripper_range_rad: List[float]
-    best_offsets: List[float]
+    assembly_offsets: List[float]
     dynamixel_kp_p: List[int]
     dynamixel_kp_i: List[int]
     dynamixel_kp_d: List[int]
@@ -71,6 +71,22 @@ class DynamixelControlConfig:
 class GelloHardware:
     """Hardware interface for GELLO teleoperation device."""
 
+    # From https://frankarobotics.github.io/docs/robot_specifications.html#limits-for-franka-research-3-fr3
+    JOINT_POSITION_LIMITS = np.array(
+        [
+            [-2.9007, 2.9007],  # -166/166 deg
+            [-1.8361, 1.8361],  # -105/105 deg
+            [-2.9007, 2.9007],  # -166/166 deg
+            [-3.0770, -0.1169],  # -176/-7 deg
+            [-2.8763, 2.8763],  # -165/165 deg
+            [0.4398, 4.6216],  # -25/265 deg
+            [-3.0508, 3.0508],  # -175/175 deg
+        ]
+    )
+
+    OPERATING_MODE = 5  # CURRENT_BASED_POSITION_MODE
+    CURRENT_LIMIT = 600  # mA
+
     def __init__(
         self,
         hardware_config: GelloHardwareParams,
@@ -84,12 +100,37 @@ class GelloHardware:
         self._gripper = hardware_config["gripper"]
         self._num_total_joints = self._num_arm_joints + (1 if self._gripper else 0)
         self._gripper_range_rad = hardware_config["gripper_range_rad"]
-        self._best_offsets = np.array(hardware_config["best_offsets"])
+        self._assembly_offsets = np.array(hardware_config["assembly_offsets"])
 
         self._initialize_driver()
 
-        OPERATING_MODE = 5  # CURRENT_BASED_POSITION_MODE
-        CURRENT_LIMIT = 600  # mA
+        # Raw joint positions (in rad) are based on the motor's internal position register.
+        # On power up, this register resets to [0, 2*Pi], losing tracking of full rotations (multi-turn).
+        # Furthermore, these raw values are offset by the physical assembly position (self._assembly_offsets).
+        self._initial_arm_joints_raw = self._driver.get_joints()[: self._num_arm_joints]
+
+        # To get from raw to processed initial joint positions, we need to:
+        # 1. Remove the physical assembly offset (self._assembly_offsets).
+        # 2. Recover the absolute position: map the raw angle into the range [mid-Pi, mid+Pi)
+        #    centered on the joint's working area (mid_joint_positions) to resolve the
+        #    multi-turn ambiguity from the motor's power-on reset.
+        # After initialization, further position updates are done incrementally to maintain continuity.
+        self._mid_joint_positions = self.JOINT_POSITION_LIMITS.mean(axis=1)
+        initial_arm_joints = (
+            np.mod(
+                (self._initial_arm_joints_raw - self._assembly_offsets) * self._joint_signs
+                - self._mid_joint_positions,
+                2 * np.pi,
+            )
+            - np.pi
+            + self._mid_joint_positions
+        )
+
+        # Store raw initial joint positions to compute joint position deltas on update
+        self._prev_arm_joints_raw = self._initial_arm_joints_raw.copy()
+        # Store processed initial joint positions for updating the processed position with the deltas
+        self._prev_arm_joints = initial_arm_joints.copy()
+
         self._dynamixel_control_config = DynamixelControlConfig(
             kp_p=hardware_config["dynamixel_kp_p"].copy(),
             kp_i=hardware_config["dynamixel_kp_i"].copy(),
@@ -98,8 +139,8 @@ class GelloHardware:
             goal_position=self._goal_position_to_pulses(
                 hardware_config["dynamixel_goal_position"]
             ).copy(),
-            goal_current=[CURRENT_LIMIT] * self._num_total_joints,
-            operating_mode=[OPERATING_MODE] * self._num_total_joints,
+            goal_current=[self.CURRENT_LIMIT] * self._num_total_joints,
+            operating_mode=[self.OPERATING_MODE] * self._num_total_joints,
         )
 
         self._initialize_parameters()
@@ -143,17 +184,39 @@ class GelloHardware:
                 "goal_position", self._dynamixel_control_config["goal_position"]
             )
 
-    def read_joint_states(self) -> tuple[np.ndarray, float]:
-        """Read current joint positions and gripper state."""
-        gello_joints_raw = self._driver.get_joints()
-        gello_arm_joints_raw = gello_joints_raw[: self._num_arm_joints]
-        gello_arm_joints = (gello_arm_joints_raw - self._best_offsets) * self._joint_signs
+    def get_joint_and_gripper_positions(self) -> tuple[np.ndarray, float]:
+        """Returns a tuple containing the processed joint positions and gripper position percentage."""
+        joints_raw = self._driver.get_joints()
+        arm_joints_raw = joints_raw[: self._num_arm_joints]
+        gripper_position_raw = joints_raw[-1]
+        return self.update_arm_joint_positions(arm_joints_raw), self.process_gripper_position(
+            gripper_position_raw
+        )
 
-        gripper_position = 0.0
-        if self._gripper:
-            gripper_position = self._gripper_readout_to_percent(gello_joints_raw[-1])
+    def update_arm_joint_positions(self, arm_joints_raw: np.ndarray) -> np.ndarray:
+        """Update positions incrementally to maintain continuity and clamp to the robot's joint limits."""
+        # Compute joint position deltas and apply to previous processed positions
+        arm_joints_delta = (arm_joints_raw - self._prev_arm_joints_raw) * self._joint_signs
+        arm_joints = self._prev_arm_joints + arm_joints_delta
 
-        return gello_arm_joints, gripper_position
+        # Store for next update
+        self._prev_arm_joints = arm_joints.copy()
+        self._prev_arm_joints_raw = arm_joints_raw.copy()
+
+        arm_joints_clipped = np.clip(
+            arm_joints, self.JOINT_POSITION_LIMITS[:, 0], self.JOINT_POSITION_LIMITS[:, 1]
+        )
+        return arm_joints_clipped
+
+    def process_gripper_position(self, gripper_position_raw: float) -> float:
+        """Converts and clamps raw gripper position to percentage (0-1). Returns 0.0 if no gripper is present."""
+        if not self._gripper:
+            return 0.0
+        gripper_position_percent = (gripper_position_raw - self._gripper_range_rad[0]) / (
+            self._gripper_range_rad[1] - self._gripper_range_rad[0]
+        )
+        gripper_position_clipped = max(0.0, min(1.0, gripper_position_percent))
+        return gripper_position_clipped
 
     def disable_torque(self) -> None:
         """Disable torque on all joints."""
@@ -161,13 +224,20 @@ class GelloHardware:
 
     def _goal_position_to_pulses(self, goals: list[float]) -> list[int]:
         """Convert goal positions from radians to dynamixel pulses."""
-        arm_goals_raw = (goals[: self._num_arm_joints] * self._joint_signs) + self._best_offsets
-        goals_raw = np.append(arm_goals_raw, goals[-1]) if self._gripper else arm_goals_raw
-        return [self._driver._rad_to_pulses(rad) for rad in goals_raw]
+        arm_goals = np.array(goals[: self._num_arm_joints])
 
-    def _gripper_readout_to_percent(self, gripper_position: float) -> float:
-        """Convert gripper position to percentage (0-1)."""
-        gripper_position_percent = (gripper_position - self._gripper_range_rad[0]) / (
-            self._gripper_range_rad[1] - self._gripper_range_rad[0]
+        # Apply the inverse mapping of the initialization process to convert arm goals back to raw motor commands:
+        # 1. Compute 'initial_rotations': The number of full 2*pi turns the motor was offset by at startup.
+        # 2. Reconstruct 'arm_goals_raw': Combine the rotation offset, goal position, and assembly offsets,
+        #    applying the correct joint signs to match the motor's coordinate system.
+        initial_rotations = np.floor_divide(
+            self._initial_arm_joints_raw - self._assembly_offsets - self._mid_joint_positions,
+            2 * np.pi,
         )
-        return max(0.0, min(1.0, gripper_position_percent))
+        arm_goals_raw = (
+            initial_rotations * 2 * np.pi + arm_goals + self._assembly_offsets
+        ) * self._joint_signs + np.pi
+
+        goals_raw = np.append(arm_goals_raw, goals[-1]) if self._gripper else arm_goals_raw
+        goals_raw_pulses = [self._driver._rad_to_pulses(rad) for rad in goals_raw]
+        return goals_raw_pulses
