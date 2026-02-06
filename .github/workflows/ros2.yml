@@ -22,5 +22,5 @@ jobs:
           runCmd: |
             cd ros2
             colcon build --cmake-args -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DCHECK_TIDY=ON
-            colcon test
+            colcon test --event-handlers console_direct+ --pytest-args -v
             colcon test-result --verbose
