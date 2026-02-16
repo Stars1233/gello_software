@@ -11,6 +11,14 @@ For additional resources:
 - [Hardware Repository](https://github.com/wuphilipp/gello_mechanical) - STL files and build instructions
 - [ROS 2 Support](ros2/README.md)
 
+## Supported Robots
+- **I2RT YAM**
+- **Franka FR3** (ROS 2 implementation, please refer to the separate documenation in [`ros2/README.md`](ros2/README.md))
+- **Franka FER (Panda)**
+- **UR**
+- **xArm**
+- add your own, see [Adding New Robots](#adding-new-robots)
+
 ## Quick Start
 
 ```bash
@@ -101,11 +109,6 @@ Sample configs for the YAM arm and the xarm can be found in `configs`.
 - Uses `PORT_CONFIG_MAP` dictionary
 - Maps USB serial ports to robot configurations
 
-#### ROS 2 YAML configs for Franka
-- Used for ROS 2 packages
-- Runtime configuration loading
-- Located in `ros2/src/franka_gello_state_publisher/config/gello_config.yaml`
-
 ## Adding New Robots
 
 To integrate a new robot to the Python configs:
@@ -141,7 +144,7 @@ python scripts/gello_get_offset.py \
     --port /dev/serial/by-id/usb-FTDI_USB__-__Serial_Converter_FT7WBG6
 ```
 
-**Franka FR3:**
+**Franka FER (Panda):**
 ```bash
 python scripts/gello_get_offset.py \
     --start-joints 0 0 0 -1.57 0 1.57 0 \
@@ -160,7 +163,6 @@ python scripts/gello_get_offset.py \
 **Joint Signs Reference:**
 - UR: `1 1 -1 1 1 1`
 - Panda: `1 -1 1 1 1 -1 1`
-- FR3: `1 1 1 1 1 -1 1`
 - xArm: `1 1 1 1 1 1 1`
 - YAM: `1 -1 -1 -1 1 1`
 

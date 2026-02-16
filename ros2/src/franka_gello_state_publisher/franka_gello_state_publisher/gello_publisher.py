@@ -63,7 +63,7 @@ class GelloPublisher(Node):
             "fr3_joint6",
             "fr3_joint7",
         ]
-        [gello_arm_joints, gripper_position] = self.gello_hardware.read_joint_states()
+        [gello_arm_joints, gripper_position] = self.gello_hardware.get_joint_and_gripper_positions()
 
         arm_joint_states = JointState()
         arm_joint_states.header.stamp = self.get_clock().now().to_msg()

@@ -37,7 +37,7 @@ def generate_robot_nodes(context):
                     {"joint_signs": config["joint_signs"]},
                     {"gripper": config["gripper"]},
                     {"gripper_range_rad": config["gripper_range_rad"]},
-                    {"best_offsets": config["best_offsets"]},
+                    {"assembly_offsets": config["assembly_offsets"]},
                     {"dynamixel_kp_p": config["dynamixel_kp_p"]},
                     {"dynamixel_kp_i": config["dynamixel_kp_i"]},
                     {"dynamixel_kp_d": config["dynamixel_kp_d"]},

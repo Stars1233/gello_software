@@ -1,9 +1,9 @@
-# This is an example config file for a 7-DoF GELLO arm teleoperating a Franka FR3 robot.
-# Check the README to learn how to adapt it to your setup.
+# This configuration works with the pre-assembled "Franka GELLO" (single arm) by Franka Robotics GmbH
+# See https://franka.de/documents
 
 SINGLE:
   namespace: ""
-  com_port: "usb-FTDI_USB__-__Serial_Converter_FT9MFR6C-if00-port0"
+  com_port: "usb-ROBOTIS_OpenRB-150_xxxxxxxx" # REPLACE WITH YOUR ID
   num_arm_joints: 7
   joint_signs: [1, -1, 1, -1, 1, 1, 1]
   gripper: true

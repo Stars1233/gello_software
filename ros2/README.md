@@ -1,6 +1,6 @@
-# GELLO ROS 2 humble integration
+# GELLO Implementation for Franka FR3 with ROS 2 (Humble) 
 
-This folder contains all required ROS 2 packages for using GELLO. 
+This folder contains all required ROS 2 packages for using GELLO with a Franka FR3 robot.
 
 ## Packages Overview
 
@@ -115,13 +115,52 @@ cd /workspace/ros2
 colcon build
 ```
 
-#### Step 2: Configure your GELLO
+#### Step 2: Configure the assembly offsets of your GELLO
 
-If you are using the "Franka GELLO Duo" variant and assembled it carefully according to the assembly instructions, the default configuration file provided in `franka_gello_state_publisher/config/` should work out of the box and you can proceed with **Step 3**.
+> 🚀 **Skip this step for pre-assembled GELLOs:**  
+> If you are using the pre-assembled "Franka GELLO" (single arm) or "Franka GELLO Duo" variant, or if you assembled it carefully according to the assembly instructions, the default configuration files provided in `franka_gello_state_publisher/config/` should work out of the box. You can proceed directly to **Step 3**.
 
-If you have a different variant or still encounter configuration issues, please follow the instructions of the [`Create the GELLO configuration and determining joint ID's` section in the main README.md](../README.md#create-the-gello-configuration-and-determining-joint-ids). 
+If you have assembled the GELLO yourself, you need to determine the following parameters for your specific assembly:
+- `joint_signs`: Multiplicative signs for each joint. If assembled according to the instructions, this should be `1 -1 1 -1 1 1 1` for the Franka GELLO. If you notice that some joints move in the opposite direction than expected, you may need to change the corresponding sign.
+- `assembly_offsets`: Since the Dynamixel flanges allow for 4 possible mounting orientations, the zero position of the joints may be offset by a multiple of pi/2 (= 90°). This parameter allows you to compensate for these offsets.
+- `gripper_range_rad`: Similarly, the joint angles corresponding to a fully open and fully closed gripper may differ based on the assembly.
 
-Use the output of the `gello_get_offset.py` script to update the `best_offsets` and `gripper_range_rad` in your GELLO configuration file located in `/workspace/ros2/src/franka_gello_state_publisher/config/`.
+Use the `get_offsets.py` script in `/ros2/src/franka_gello_state_publisher/scripts/` to determine the `assembly_offsets` and `gripper_range_rad` parameters for your specific assembly.
+
+1. Move the GELLO arm(s) to the calibration pose, depending on if it is a single arm or dual arm assembly:
+   
+    <p align="left">
+      <img src="../imgs/franka_gello_single_v05_annotated.jpg" height="300px"/>
+      <img src="../imgs/franka_gello_duo_v05_annotated.jpg" height="300px"/>
+    </p>
+2. Run the script:
+    > 💡 The `start-joints` argument of the script can be adjusted if you want to use a different calibration pose. The provided values correspond to the recommended poses shown in the images above.
+    - Single arm:
+      ```bash
+      cd /workspace/ros2/src/franka_gello_state_publisher/scripts/
+      python3 get_offsets.py \
+          --start-joints 0 0 0 -1.57 0 1.57 0  \
+          --joint-signs 1 -1 1 -1 1 1 1 \
+          --port /dev/serial/by-id/<your_com_port_id>
+      ```
+    - Dual arm left:
+      ```bash
+      cd /workspace/ros2/src/franka_gello_state_publisher/scripts/
+      python3 get_offsets.py \
+          --start-joints -1.57 -0.80 1.80 -3.00 1.40 1.50 -2.10  \
+          --joint-signs 1 -1 1 -1 1 1 1 \
+          --port /dev/serial/by-id/<your_com_port_id>
+      ```
+    - Dual arm right:
+      ```bash
+      cd /workspace/ros2/src/franka_gello_state_publisher/scripts/
+      python3 get_offsets.py \
+          --start-joints 1.57 -0.80 -1.80 -3.00 -1.40 1.50 2.10  \
+          --joint-signs 1 -1 1 -1 1 1 1 \
+          --port /dev/serial/by-id/<your_com_port_id>
+      ```
+
+Use the output of the `get_offsets.py` script to update the values in your GELLO configuration file located in `/workspace/ros2/src/franka_gello_state_publisher/config/`.
       
 Rebuild the project to ensure the updated configuration is applied:
 
@@ -147,7 +186,7 @@ The `config_file` argument is **optional**. If not provided, it defaults to `exa
 - `num_joints`: 7 for Franka FR3
 - `joint_signs`: as used for calibration
 - `gripper`: true if Gello gripper state shall be used
-- `best_offsets` and `gripper_range_rad`: as determined with calibration routine
+- `assembly_offsets` and `gripper_range_rad`: as determined with calibration routine
 - Dynamixel control parameters: `dynamixel_...` (see below)
 
 **Virtual Springs and Dampers:**<a name="virtual-springs-dampers"></a>
